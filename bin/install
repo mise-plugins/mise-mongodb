@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 function unify_version {
   printf "%03d%03d%03d" $(echo "$1"| sed -e 's/-rc[0-9]//' | tr '.' ' ');
 }
@@ -14,12 +15,22 @@ install_mongo() {
   local filename=""
   local download_url=""
 
+  # Resolve 'latest' to actual version
+  if [[ "$version" == "latest" ]]; then
+    version="7.0.12"  # Update this to the actual latest version
+  fi
+
   [ "Linux" = "$(uname)" ] && platform="linux" || platform="osx"
   [ "x86_64" = "$(uname -m)" ] && arch="x86_64" || [ "arm64" = "$(uname -m)" ] && arch="arm64" || arch="i686"
   [ "linux" = "${platform}" ] && tempdir=$(mktemp -d asdf-mongodb.XXXX) || tempdir=$(mktemp -dt asdf-mongodb.XXXX)
 
   if [[ "linux" = "${platform}" ]]; then
-    filename="mongodb-linux-${arch}-${version}.tgz"
+    # For Linux, use the correct format
+    if [[ "$arch" == "arm64" ]]; then
+      filename="mongodb-linux-aarch64-ubuntu2204-${version}.tgz"
+    else
+      filename="mongodb-linux-x86_64-ubuntu2204-${version}.tgz"
+    fi
   else
     if [[ "$(unify_version "$version")" > "$(unify_version "5.0.21")" ]]; then
       filename="mongodb-macos-${arch}-${version}.tgz"
@@ -37,7 +48,23 @@ install_mongo() {
 
   echo "download_url $download_url"
 
-  curl -L "${download_url}" -o "${tempfile}"
+  # Check if URL exists before downloading
+  if ! curl -f -L "${download_url}" -o "${tempfile}"; then
+    echo "ERROR: Failed to download MongoDB from ${download_url}"
+    echo "Please check if the version ${version} exists for your platform/architecture"
+    rm -rf "${tempdir}"
+    exit 1
+  fi
+
+  # Verify it's actually a gzip file
+  if ! file "${tempfile}" | grep -q "gzip compressed"; then
+    echo "ERROR: Downloaded file is not a valid gzip archive"
+    echo "Content:"
+    cat "${tempfile}"
+    rm -rf "${tempdir}"
+    exit 1
+  fi
+
   tar zxf "${tempfile}" -C $install_path --strip-components=1 || exit 1
 
   rm -rf "${tempdir}"

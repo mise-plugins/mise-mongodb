@@ -1,3 +1,32 @@
 #!/usr/bin/env bash
-versions_list="$(curl -s http://dl.mongodb.org/dl/src/ | awk '!/_rc/ && /http:\/\/downloads.mongodb.org\/src\/mongodb-src-r.*.tar.gz\"/{sub(/^.*mongodb-src-r/,"");sub(/\.tar.gz.*$/,"");print}' | sort)"
-echo $versions_list
+
+# Fetch versions from MongoDB's GitHub releases (max 100 per page)
+versions=$(curl -s "https://api.github.com/repos/mongodb/mongo/tags?per_page=100" | \
+  grep '"name":' | \
+  sed -E 's/.*"name": "r?([0-9]+\.[0-9]+\.[0-9]+).*".*/\1/' | \
+  grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | \
+  sort -V -r | \
+  head -100)
+
+# If GitHub API fails or returns too few versions, fall back to a hardcoded list
+if [ -z "$versions" ] || [ $(echo "$versions" | wc -l) -lt 10 ]; then
+  versions="4.4.29
+5.0.28
+6.0.16
+7.0.14
+8.0.3
+8.0.4
+8.0.5
+8.0.6
+8.0.7
+8.0.8
+8.0.9
+8.0.10
+8.0.11
+8.1.0
+8.1.1
+8.1.2"
+fi
+
+# Output each version on a new line (mise expects this format)
+echo "$versions" | tr ' ' '\n' | sort -V
